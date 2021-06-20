@@ -55,7 +55,7 @@ AXUIElementRef getAXWindow(int pid, int handle) {
     CGWindowID windowId;
     _AXUIElementGetWindow(window, &windowId);
 
-    if (windowId == handle) {
+    if ((int)windowId == handle) {
       // Retain returned window so it doesn't get released with rest of list
       CFRetain(window);
       CFRelease(windows);
@@ -115,16 +115,16 @@ Napi::Array getWindows(const Napi::CallbackInfo &info) {
     NSNumber *windowNumber = info[(id)kCGWindowNumber];
 
     auto app = [NSRunningApplication runningApplicationWithProcessIdentifier: [ownerPid intValue]];
-    auto path = app ? [app.bundleURL.path UTF8String] : "";
+    auto path = app ? [app.bundleURL.path UTF8String] : NULL;
 
-    if (app && path != "") {
+    if (app && path != NULL) {
       vec.push_back(Napi::Number::New(env, [windowNumber intValue]));
     }
   }
 
   auto arr = Napi::Array::New(env, vec.size());
 
-  for (int i = 0; i < vec.size(); i++) {
+  for (int i = 0; i < (int)vec.size(); i++) {
     arr[i] = vec[i];
   }
 
@@ -193,7 +193,7 @@ Napi::String getWindowTitle(const Napi::CallbackInfo &info) {
 
   if (wInfo) {
     NSString *windowName = wInfo[(id)kCGWindowName];
-    if(windowName != "") return Napi::String::New(env, "");
+    if([windowName isEqualToString:@""]) return Napi::String::New(env, "");
     return Napi::String::New(env, [windowName UTF8String]);
   }
 

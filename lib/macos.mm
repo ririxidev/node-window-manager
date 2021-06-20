@@ -192,8 +192,9 @@ Napi::String getWindowTitle(const Napi::CallbackInfo &info) {
   auto wInfo = getWindowInfo(handle);
 
   if (wInfo) {
-    NSString *windowName = wInfo[(id)kCGWindowName].ToString().Utf8Value();
-    return Napi::String::New(env, windowName);
+    NSString *windowName = wInfo[(id)kCGWindowName];
+    if(windowName != "") return Napi::String::New(env, "");
+    return Napi::String::New(env, [windowName UTF8String]);
   }
 
   return Napi::String::New(env, "");

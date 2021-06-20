@@ -131,7 +131,7 @@ Napi::Array getWindows(const Napi::CallbackInfo &info) {
   if (windowList) {
     CFRelease(windowList);
   }
-  
+
   return arr;
 }
 
@@ -192,8 +192,8 @@ Napi::String getWindowTitle(const Napi::CallbackInfo &info) {
   auto wInfo = getWindowInfo(handle);
 
   if (wInfo) {
-    NSString *windowName = wInfo[(id)kCGWindowName];
-    return Napi::String::New(env, [windowName UTF8String]);
+    NSString *windowName = wInfo[(id)kCGWindowName].ToString().Utf8Value();
+    return Napi::String::New(env, windowName);
   }
 
   return Napi::String::New(env, "");

@@ -191,11 +191,11 @@ Napi::String getWindowTitle(const Napi::CallbackInfo &info) {
   try {
     if (wInfo) {
       NSString *windowName = wInfo[(id)kCGWindowName];
-      if([windowName isEqual:[NSNull null]] || [windowName isEqualToString:@""]) return env.Null();
+      if([windowName isEqual:[NSNull null]] || [windowName isEqualToString:@""]) return Napi::String::New(env, std::string());
       return Napi::String::New(env, std::string([windowName UTF8String]));
     }
   } catch(...) {
-    return env.Null();
+    return Napi::String::New(env, std::string());
   }
 }
 

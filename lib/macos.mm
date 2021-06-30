@@ -127,9 +127,7 @@ Napi::Array getWindows(const Napi::CallbackInfo &info) {
     arr[i] = vec[i];
   }
 
-  if (windowList) {
-    CFRelease(windowList);
-  }
+  CFRelease(windowList);
 
   return arr;
 }
@@ -193,11 +191,11 @@ Napi::String getWindowTitle(const Napi::CallbackInfo &info) {
   try {
     if (wInfo) {
       NSString *windowName = wInfo[(id)kCGWindowName];
-      if([windowName isEqual:[NSNull null]] || [windowName isEqualToString:@""]) return Napi::String::New(env, std::string());
+      if([windowName isEqual:[NSNull null]] || [windowName isEqualToString:@""]) return env.Null();
       return Napi::String::New(env, std::string([windowName UTF8String]));
     }
   } catch(...) {
-    return Napi::String::New(env, std::string());
+    return env.Null();
   }
 }
 

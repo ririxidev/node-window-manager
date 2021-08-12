@@ -32,6 +32,7 @@
   },
   "homepage": "https://github.com/sentialx/node-window-manager#readme",
   "devDependencies": {
+    "@types/lodash": "^4.14.171",
     "@types/node": "13.11.1",
     "node-gyp": "^6.1.0",
     "tslint": "6.1.1",
@@ -39,6 +40,7 @@
   },
   "dependencies": {
     "extract-file-icon": "^0.3.2",
+    "lodash": "^4.17.21",
     "node-addon-api": "2.0.0",
     "node-gyp-build": "^4.2.1"
   },

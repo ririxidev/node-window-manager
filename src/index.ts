@@ -1,97 +1,149 @@
-import { Window } from "./classes/window";
-import { EventEmitter } from "events";
-import { platform } from "os";
-import { Monitor } from "./classes/monitor";
-import { EmptyMonitor } from "./classes/empty-monitor";
-import { resolve } from 'path';
+import { Window } from "./classes/window"
+import { EventEmitter } from "events"
+import { platform } from "os"
+import { Monitor } from "./classes/monitor"
+import { EmptyMonitor } from "./classes/empty-monitor"
+import { resolve } from "path"
+import isEqual from "lodash/isEqual"
+import each from "lodash/each"
+import isEmpty from "lodash/isEmpty"
+import { IRectangle } from "./interfaces"
 
-let addon: any;
+let addon: any
 
 if (platform() === "win32" || platform() === "darwin") {
-  const ADDON_PATH = (process.env.NODE_ENV != "dev") ? "Release" : "Debug";
-  addon = require(`node-gyp-build`)(resolve(__dirname, '..'));
+  const ADDON_PATH =
+    process.env.NODE_ENV != "dev" && process.env.NODE_ENV != "development"
+      ? "Release"
+      : "Debug"
+
+  addon = require(`node-gyp-build`)(resolve(__dirname, ".."))
 }
 
-let interval: any = null;
-
-let registeredEvents: string[] = [];
+type WindowId = number
 
 class WindowManager extends EventEmitter {
+  private lastActivatedId: number
+  private lastPositioningMap: Record<WindowId, IRectangle> = {}
+  private lastVisibilityMap: Record<WindowId, boolean> = {}
+  private windows: Record<WindowId, Window> = {}
+  private mainInterval: ReturnType<typeof setInterval>
+
   constructor() {
-    super();
+    super()
 
-    let lastId: number;
+    if (!addon) {
+      throw new Error("Cannot load window manager addon")
+    }
 
-    if (!addon) return;
-
-    this.on("newListener", event => {
-      if (event === 'window-activated') {
-        lastId = addon.getActiveWindow();
+    this.on("newListener", () => {
+      if (this.mainInterval) {
+        return
       }
+      this.lastActivatedId = addon.getActiveWindow()
+      this.mainInterval = setInterval(this.monitorChanges.bind(this), 50)
+    })
+  }
 
-      if (registeredEvents.indexOf(event) !== -1) return;
+  public stopMonitoring() {
+    clearInterval(this.mainInterval)
+  }
 
-      if (event === "window-activated") {
-        interval = setInterval(async () => {
-          const win = addon.getActiveWindow();
-          
-          if (lastId !== win) {
-            lastId = win;
-            this.emit("window-activated", new Window(win));
-          }
-        }, 50);
-      } else {
-        return;
-      }
+  protected monitorChanges() {
+    const id = addon.getActiveWindow()
 
-      registeredEvents.push(event);
-    });
+    if (!id) {
+      return
+    }
 
-    this.on("removeListener", event => {
-      if (this.listenerCount(event) > 0) return;
+    // new window
+    if (!this.windows[id]) {
+      this.windows[id] = new Window(id)
+      this.emit("new-window", this.windows[id])
+    }
 
-      if (event === "window-activated") {
-        clearInterval(interval);
-      }
+    if (this.lastActivatedId && this.lastActivatedId !== id) {
+      this.emit("window-activated", this.windows[id])
+    }
+    this.lastActivatedId = id
 
-      registeredEvents = registeredEvents.filter(x => x !== event);
-    });
+    // this.analysePositioning(id)
+    // this.analyseVisibility(id)
+
+    each(this.windows, (win, winId) => {
+      // if (id !== winId) {
+      this.analysePositioning(+winId)
+      this.analyseVisibility(+winId)
+      // }
+    })
+  }
+
+  protected analysePositioning(id: number) {
+    if (
+      this.lastPositioningMap[id] &&
+      !isEmpty(this.windows[id].getBounds()) &&
+      false ===
+        isEqual(this.lastPositioningMap[id], this.windows[id].getBounds())
+    ) {
+      this.emit(
+        "window-bounds-change",
+        this.windows[id],
+        this.windows[id].getBounds()
+      )
+    }
+    this.lastPositioningMap[id] = this.windows[id].getBounds()
+  }
+
+  protected analyseVisibility(id: number) {
+    if (
+      this.lastVisibilityMap[id] !== undefined &&
+      this.lastVisibilityMap[id] !== this.windows[id].isVisible()
+    ) {
+      this.emit(
+        "window-visibility-change",
+        this.windows[id],
+        this.windows[id].isVisible()
+      )
+    }
+    // console.log("visible", this.windows[id].isVisible())
+    this.lastVisibilityMap[id] = this.windows[id].isVisible()
   }
 
   requestAccessibility = () => {
-    if (!addon || !addon.requestAccessibility) return true;
-    return addon.requestAccessibility();
+    if (!addon.requestAccessibility) return true
+    return addon.requestAccessibility()
   }
 
   getActiveWindow = () => {
-    if (!addon) return;
-    return new Window(addon.getActiveWindow());
-  };
+    return new Window(addon.getActiveWindow())
+  }
 
   getWindows = (): Window[] => {
-    if (!addon || !addon.getWindows) return [];
-    return addon.getWindows().map((win: any) => new Window(win)).filter((x: Window) => x.isWindow());
-  };
+    return addon
+      .getWindows()
+      .map((win: any) => new Window(win))
+      .filter((x: Window) => x.isWindow())
+  }
 
   getMonitors = (): Monitor[] => {
-    if (!addon || !addon.getMonitors) return [];
-    return addon.getMonitors().map((mon: any) => new Monitor(mon));
-  };
+    if (!addon.getMonitors) return []
+    return addon.getMonitors().map((mon: any) => new Monitor(mon))
+  }
 
   getPrimaryMonitor = (): Monitor | EmptyMonitor => {
-    if (process.platform === 'win32') {
-      return this.getMonitors().find(x => x.isPrimary);
+    if (process.platform === "win32") {
+      return this.getMonitors().find((x) => x.isPrimary)
     } else {
-      return new EmptyMonitor();
+      return new EmptyMonitor()
     }
   }
 
   createProcess = (path: string, cmd = ""): number => {
-    if (!addon || !addon.createProcess) return;
-    return addon.createProcess(path, cmd);
-  };
+    if (!addon.createProcess) return
+    return addon.createProcess(path, cmd)
+  }
 }
 
-const windowManager = new WindowManager();
+const windowManager = new WindowManager()
 
-export { windowManager, Window, addon };
+export { windowManager, Window, addon }

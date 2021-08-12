@@ -1,3 +1,4 @@
+#include <CoreFoundation/CoreFoundation.h>
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 #import <ApplicationServices/ApplicationServices.h>
@@ -13,8 +14,14 @@ extern "C" AXError _AXUIElementGetWindow(AXUIElementRef, CGWindowID* out);
 std::map<int, AXUIElementRef> windowsMap;
 
 bool _requestAccessibility(bool showDialog) {
-  NSDictionary* opts = @{static_cast<id> (kAXTrustedCheckOptionPrompt): showDialog ? @YES : @NO};
-  return AXIsProcessTrustedWithOptions(static_cast<CFDictionaryRef> (opts));
+  if (&AXIsProcessTrustedWithOptions != NULL) {
+      // 10.9 and later
+    NSDictionary* opts = @{static_cast<id> (kAXTrustedCheckOptionPrompt): showDialog ? @YES : @NO};
+    return AXIsProcessTrustedWithOptions(static_cast<CFDictionaryRef> (opts));
+  } else {
+      // 10.8 and older
+    return true;
+  }
 }
 
 Napi::Boolean requestAccessibility(const Napi::CallbackInfo &info) {
@@ -23,7 +30,8 @@ Napi::Boolean requestAccessibility(const Napi::CallbackInfo &info) {
 }
 
 NSDictionary* getWindowInfo(int handle) {
-  CGWindowListOption listOptions = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
+  // CGWindowListOption listOptions = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
+  CGWindowListOption listOptions = kCGWindowListExcludeDesktopElements;
   CFArrayRef windowList = CGWindowListCopyWindowInfo(listOptions, kCGNullWindowID);
 
   for (NSDictionary *info in (NSArray *)windowList) {
@@ -105,6 +113,7 @@ Napi::Array getWindows(const Napi::CallbackInfo &info) {
   Napi::Env env{info.Env()};
 
   CGWindowListOption listOptions = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
+  // CGWindowListOption listOptions = kCGWindowListExcludeDesktopElements;
   CFArrayRef windowList = CGWindowListCopyWindowInfo(listOptions, kCGNullWindowID);
 
   std::vector<Napi::Number> vec;
@@ -112,11 +121,14 @@ Napi::Array getWindows(const Napi::CallbackInfo &info) {
   for (NSDictionary *info in (NSArray *)windowList) {
     NSNumber *ownerPid = info[(id)kCGWindowOwnerPID];
     NSNumber *windowNumber = info[(id)kCGWindowNumber];
+    NSNumber *windowLayer = info[(id)kCGWindowLayer];
+    NSString *windowTitle = info[(id)kCGWindowName];
 
     auto app = [NSRunningApplication runningApplicationWithProcessIdentifier: [ownerPid intValue]];
     auto path = app ? [app.bundleURL.path UTF8String] : NULL;
 
-    if (app && path != NULL) {
+    // Check windows to make sure they have an app, path, title and use window layer equal to 0.
+    if (app && path != NULL && [windowLayer intValue] == 0 && ![windowTitle isEqualToString:@""]) {
       vec.push_back(Napi::Number::New(env, [windowNumber intValue]));
     }
   }
@@ -141,7 +153,7 @@ Napi::Number getActiveWindow(const Napi::CallbackInfo &info) {
   for (NSDictionary *info in (NSArray *)windowList) {
     NSNumber *ownerPid = info[(id)kCGWindowOwnerPID];
     NSNumber *windowNumber = info[(id)kCGWindowNumber];
-
+    
     auto app = [NSRunningApplication runningApplicationWithProcessIdentifier: [ownerPid intValue]];
 
     if (![app isActive]) {
@@ -167,11 +179,18 @@ Napi::Object initWindow(const Napi::CallbackInfo &info) {
 
   if (wInfo) {
     NSNumber *ownerPid = wInfo[(id)kCGWindowOwnerPID];
+    NSNumber *layer = wInfo[(id)kCGWindowLayer];
+    NSString *name = wInfo[(id)kCGWindowName];
     NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier: [ownerPid intValue]];
 
     auto obj = Napi::Object::New(env);
     obj.Set("processId", [ownerPid intValue]);
+    obj.Set("layer", [layer intValue]);
+    obj.Set("name", [name UTF8String]);
     obj.Set("path", [app.bundleURL.path UTF8String]);
+    obj.Set("bundleId", [app.bundleIdentifier UTF8String]);
+    // obj.Set("active", app.isActive);
+    // obj.Set("hidden", app.isHidden);
 
     cacheWindow(handle, [ownerPid intValue]);
 
@@ -195,8 +214,9 @@ Napi::String getWindowTitle(const Napi::CallbackInfo &info) {
       return Napi::String::New(env, std::string([windowName UTF8String]));
     }
   } catch(...) {
-    return Napi::String::New(env, std::string());
+    // return Napi::String::New(env, std::string());
   }
+  return Napi::String::New(env, std::string());
 }
 
 Napi::Object getWindowBounds(const Napi::CallbackInfo &info) {
@@ -220,6 +240,22 @@ Napi::Object getWindowBounds(const Napi::CallbackInfo &info) {
   }
 
   return Napi::Object::New(env);
+}
+
+Napi::Boolean isWindowVisible(const Napi::CallbackInfo &info) {
+  Napi::Env env{info.Env()};
+
+  auto handle = info[0].As<Napi::Number>().Int32Value();
+  auto wInfo = getWindowInfo(handle);
+  
+  CFBooleanRef is_visible = reinterpret_cast<CFBooleanRef>(                                                           wInfo[(id)kCGWindowIsOnscreen]);
+  
+  bool visible = false;
+  if (is_visible != NULL) {
+    visible = CFBooleanGetValue(is_visible);
+  }
+
+  return Napi::Boolean::New(env, visible);
 }
 
 Napi::Boolean setWindowBounds(const Napi::CallbackInfo &info) {
@@ -314,6 +350,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
                 Napi::Function::New(env, getWindowBounds));
     exports.Set(Napi::String::New(env, "getWindowTitle"),
                 Napi::Function::New(env, getWindowTitle));
+    exports.Set(Napi::String::New(env, "isWindowVisible"),
+              Napi::Function::New(env, isWindowVisible));
     exports.Set(Napi::String::New(env, "initWindow"),
                 Napi::Function::New(env, initWindow));
     exports.Set(Napi::String::New(env, "bringWindowToTop"),

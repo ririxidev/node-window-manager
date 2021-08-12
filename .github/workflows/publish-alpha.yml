@@ -59,7 +59,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - run: npm dist-tag add @pokerdashboard/types@${{ steps.npm_version.outputs.version }} $BRANCH_NAME
+      - run: npm dist-tag add @pokerdashboard/node-window-manager@${{ steps.npm_version.outputs.version }} $BRANCH_NAME
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

@@ -1,24 +1,47 @@
 # This is a basic workflow to help you get started with Actions
 
-name: Publish to NPM (alpha version)
+name: CD (staging)
 
 # Controls when the action will run. 
 on:
+  pull_request:
+    branches:
+      - "main"
   # Triggers the workflow on push or pull request events but only for the main branch
   push:
+    # only on branches (but main), not tags (tags are reserved to prod releases)
     branches:
-    - "*"
-    paths:
-    - 'src/**.ts'
-    - 'package.json'
-
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+      - "*"
+      - "!main"
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
+
+  jest:
+    runs-on: ubuntu-latest
+    if: ${{ github.actor != 'dependabot[bot]' && github.actor != 'dependabot-preview[bot]' }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js
+      uses: actions/setup-node@v1
+      with:
+        node-version: '14.x'
+        registry-url: 'https://registry.npmjs.org'
+
+    - run: yarn install --ignore-scripts
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    - run: yarn build
+    - run: yarn test
+
   publish-alpha:
+
+    if: ${{ github.actor != 'dependabot[bot]' && github.actor != 'dependabot-preview[bot]' }}
+
+    # only if tests pass
+    needs: jest
+
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
@@ -32,7 +55,7 @@ jobs:
           node-version: 14
           registry-url: 'https://registry.npmjs.org'
 
-      - run: yarn install --ignore-scripts --frozen-lockfile
+      - run: yarn install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -55,6 +78,16 @@ jobs:
       - id: npm_version
         run: echo "::set-output name=version::$(npm version --no-git-tag-version prerelease --preid=$GITHUB_SHA_SHORT)"
 
+      - run: yarn build
+
+      - uses: chrnorm/deployment-action@releases/v1
+        name: Create GitHub deployment
+        id: deployment
+        with:
+          token: "${{ github.token }}"
+          description: "version ${{ steps.npm_version.outputs.version }}"
+          environment: staging               
+
       - run: npm publish --tag alpha
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -62,6 +95,22 @@ jobs:
       - run: npm dist-tag add @pokerdashboard/node-window-manager@${{ steps.npm_version.outputs.version }} $BRANCH_NAME
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Update deployment status (success)
+        if: success()
+        uses: chrnorm/deployment-status@releases/v1
+        with:
+          token: "${{ github.token }}"
+          state: "success"
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
+
+      - name: Update deployment status (failure)
+        if: failure()
+        uses: chrnorm/deployment-status@releases/v1
+        with:
+          token: "${{ github.token }}"
+          state: "failure"
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}             
 
         
 

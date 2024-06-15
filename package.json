@@ -15,25 +15,18 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/sentialx/node-window-manager.git"
+		"url": "git+https://github.com/rxri/node-window-manager.git"
 	},
-	"keywords": [
-		"window-manager",
-		"native",
-		"macos",
-		"linux",
-		"windows"
-	],
+	"keywords": ["window-manager", "native", "macos", "linux", "windows"],
 	"author": "sentialx",
 	"license": "MIT",
 	"bugs": {
-		"url": "https://github.com/sentialx/node-window-manager/issues"
+		"url": "https://github.com/rxri/node-window-manager/issues"
 	},
-	"homepage": "https://github.com/sentialx/node-window-manager#readme",
+	"homepage": "https://github.com/rxri/node-window-manager#readme",
 	"devDependencies": {
 		"@types/node": "13.11.1",
 		"node-gyp": "^9.1.0",
-		"tslint": "6.1.1",
 		"typescript": "3.8.3"
 	},
 	"dependencies": {
